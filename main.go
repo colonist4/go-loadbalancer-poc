@@ -53,21 +53,19 @@ type LoadBalancer struct {
 	Backends     []*Backend
 	BackendCount int64
 	ReqIdx       atomic.Int64
-	BPMLimit     int
-	RPMLimit     int
 }
 
-func (lb *LoadBalancer) RegisterBackend(host string, port int) {
+func (lb *LoadBalancer) RegisterBackend(host string, port int, bpm int, rpm int) {
 	backend := &Backend{
 		Host: host,
 		Proxy: httputil.NewSingleHostReverseProxy(
 			&url.URL{Scheme: "http", Host: fmt.Sprintf("%s:%d", host, port)},
 		),
 		LastTokenTimeMs: time.Now().UnixMilli(),
-		ByteTokenPerMs:  float32(lb.BPMLimit) / 60 / 1000,
-		ReqTokenPerMs:   float32(lb.RPMLimit) / 60 / 1000,
-		MaxByteToken:    float32(lb.BPMLimit),
-		MaxReqToken:     float32(lb.RPMLimit),
+		ByteTokenPerMs:  float32(bpm) / 60 / 1000,
+		ReqTokenPerMs:   float32(rpm) / 60 / 1000,
+		MaxByteToken:    float32(bpm),
+		MaxReqToken:     float32(rpm),
 	}
 	lb.Backends = append(lb.Backends, backend)
 	lb.BackendCount += 1
@@ -106,8 +104,6 @@ func NewLoadBalancer() *LoadBalancer {
 		Backends:     make([]*Backend, 0),
 		BackendCount: 0,
 		ReqIdx:       atomic.Int64{},
-		BPMLimit:     1024 * 1024,
-		RPMLimit:     60,
 	}
 }
 
@@ -127,8 +123,8 @@ func main() {
 		}
 	} else {
 		var lb = NewLoadBalancer()
-		lb.RegisterBackend("localhost", 8081)
-		lb.RegisterBackend("localhost", 8082)
+		lb.RegisterBackend("localhost", 8081, 1024*1024, 60)
+		lb.RegisterBackend("localhost", 8082, 1024, 1)
 
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			lb.ServeHTTP(w, r)
